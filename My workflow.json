@@ -1,0 +1,195 @@
+{
+  "updatedAt": "2025-12-04T06:37:12.881Z",
+  "createdAt": "2025-12-03T22:23:46.699Z",
+  "id": "AcTnxjRzyDFnkMfR",
+  "name": "My workflow",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "labelIds": [
+            "INBOX"
+          ],
+          "readStatus": "unread"
+        },
+        "options": {}
+      },
+      "id": "4862075b-8ac1-4eca-861b-725cf8a9f47b",
+      "name": "Gmail Tetikleyici",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        128
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Dr94VJdkpXskpoQw",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.from.value[0].address }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "sahibinden.com"
+            },
+            {
+              "value2": "emlakjet.com",
+              "output": 1
+            },
+            {
+              "value2": "hepsiemlak.com",
+              "output": 2
+            }
+          ]
+        },
+        "fallbackOutput": 3
+      },
+      "id": "195b64a5-50f8-46ed-b8fd-7685b4eaa2c1",
+      "name": "Hangi Site?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        160,
+        96
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// GELISMIS DEBUG PARSER\n// Gelen verinin ne oldugunu anlamamizi saglar\n\n// 1. Gelen veri var mi kontrol et\nconst item = $input.item;\nconst html = item.json.html || item.json.body || item.json.snippet || \"\";\n\nif (!html) {\n  return [{\n    error: \"HTML verisi bulunamadi!\",\n    available_keys: Object.keys(item.json)\n  }];\n}\n\nconst $ = require('cheerio').load(html);\nconst results = [];\n\n// 2. Sayfadaki TUM linkleri tarayalim (Sadece ilan degil)\nconst allLinks = [];\n$('a').each((i, el) => {\n  const href = $(el).attr('href');\n  if (href) allLinks.push(href);\n});\n\n// 3. Ozel olarak ilan linklerini ayiklayalim\n$('a[href*=\"/ilan/\"]').each((i, el) => {\n    const link = $(el).attr('href');\n    // ID yakalamaya calis, bulamazsan da linki al\n    const idMatch = link.match(/-(\\d{9,10})\\/detay/) || [\"\", \"ID_BULUNAMADI\"];\n    \n    // Fiyat bulmaya calis (Daha genis arama)\n    // Linkin oldugu satirdaki herhangi bir sayisal degeri ariyoruz\n    const container = $(el).closest('tr, div, table'); \n    const fullText = container.text().replace(/\\s+/g, ' ').trim();\n    \n    // Basit bir fiyat tahmini (icinde TL gecen kisim)\n    const priceGuess = fullText.match(/(\\d[\\d\\.,]*\\s*TL)/);\n\n    results.push({\n      status: \"ILAN BULUNDU\",\n      external_id: idMatch[1],\n      url: link,\n      guessed_price: priceGuess ? priceGuess[0] : \"Fiyat Algilanmadi\",\n      full_row_text: fullText.substring(0, 100) + \"...\" // Kontrol icin metnin basi\n    });\n});\n\n// 4. Eger hic ilan bulamazsa genel bilgi ver\nif (results.length === 0) {\n  results.push({\n    status: \"ILAN YOK - Debug Bilgisi\",\n    message: \"HTML icinde ilan linki bulunamadi.\",\n    total_links_found: allLinks.length,\n    sample_links: allLinks.slice(0, 3), // Ilk 3 linki goster\n    html_preview: html.substring(0, 200) // HTML'in basini goster\n  });\n}\n\nreturn results;"
+      },
+      "id": "e5f348ea-768f-430a-acb5-4f38936281e8",
+      "name": "Sahibinden Parser (Cheerio)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 🛑 Dur ve Test Et\nBurası test aşamasıdır. Gmail kutunda 'sahibinden' veya benzeri bir yerden gelmiş okunmamış bir emlak bildirimi olduğundan emin ol ve **Execute Workflow** butonuna bas.",
+        "height": 234,
+        "width": 264
+      },
+      "id": "04c9fa94-ae7e-460c-9cc2-c841709de3ea",
+      "name": "Not",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gelen ham veriyi veritabanina uygun hale getirir\nconst results = [];\n\nfor (const item of $input.all()) {\n  const json = item.json;\n  \n  // Fiyat Temizligi: \"2.500.000 TL\" -> 2500000\n  let price = 0;\n  let currency = 'TRY';\n  \n  if (json.price_raw) {\n    // Sadece rakamlari ve virgulu birak, noktalari sil\n    let cleanString = json.price_raw.replace(/\\./g, '').replace(/TL/i, '').trim();\n    // Virgulu noktaya cevir\n    cleanString = cleanString.replace(',', '.');\n    price = parseFloat(cleanString);\n  }\n  \n  results.push({\n    json: {\n      external_id: json.external_id,\n      title: json.title,\n      price: price,\n      currency: currency,\n      url: json.url,\n      source: json.source,\n      location: json.location || null,\n      created_at: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        32
+      ],
+      "id": "7f68b6b2-1aa9-4e61-a900-a8886a5e08c4",
+      "name": "Veri Temizleme"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        848,
+        -160
+      ],
+      "id": "8a4854f8-28a3-41fb-8996-927905103bd5",
+      "name": "Insert or update rows in a table"
+    }
+  ],
+  "connections": {
+    "Gmail Tetikleyici": {
+      "main": [
+        [
+          {
+            "node": "Hangi Site?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hangi Site?": {
+      "main": [
+        [
+          {
+            "node": "Sahibinden Parser (Cheerio)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sahibinden Parser (Cheerio)": {
+      "main": [
+        [
+          {
+            "node": "Veri Temizleme",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "681c6582-4281-4f7f-8d2e-f1e4ff9fbdd1",
+  "activeVersionId": null,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2025-12-03T22:23:46.699Z",
+      "createdAt": "2025-12-03T22:23:46.699Z",
+      "role": "workflow:owner",
+      "workflowId": "AcTnxjRzyDFnkMfR",
+      "projectId": "n7PkrN53sUUxEdoo"
+    }
+  ],
+  "activeVersion": null,
+  "tags": []
+}
