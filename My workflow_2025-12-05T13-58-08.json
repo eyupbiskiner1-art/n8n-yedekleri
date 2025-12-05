@@ -1,0 +1,1148 @@
+{
+  "updatedAt": "2025-12-05T09:25:54.021Z",
+  "createdAt": "2025-12-03T22:23:46.699Z",
+  "id": "AcTnxjRzyDFnkMfR",
+  "name": "My workflow",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "labelIds": [
+            "INBOX"
+          ],
+          "q": "newer_than:15d subject:\"Favori Arama İçin Sonuçlar\"",
+          "readStatus": "unread"
+        },
+        "options": {}
+      },
+      "id": "4862075b-8ac1-4eca-861b-725cf8a9f47b",
+      "name": "Gmail Tetikleyici",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        32
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Dr94VJdkpXskpoQw",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.from.value[0].address }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "sahibinden.com"
+            },
+            {
+              "value2": "emlakjet.com",
+              "output": 1
+            },
+            {
+              "value2": "hepsiemlak.com",
+              "output": 2
+            }
+          ]
+        },
+        "fallbackOutput": 3
+      },
+      "id": "195b64a5-50f8-46ed-b8fd-7685b4eaa2c1",
+      "name": "Hangi Site?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        0
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// SAHIBINDEN.COM PARSER (FINAL VERSIYON)\n// Bu kod ilanin tüm detaylarini (Baslik, Fiyat, Link) ceker.\n\nconst html = $input.item.json.html || \"\";\nconst $ = require('cheerio').load(html);\nconst results = [];\n\n// Ilan linklerini bul\n$('a[href*=\"/ilan/\"]').each((i, el) => {\n  const link = $(el).attr('href');\n  \n  // Linkten ID'yi cikar\n  const idMatch = link.match(/-(\\d{9,10})\\/detay/);\n  \n  if (idMatch) {\n    // Ilanin oldugu satiri (cerceveyi) bul\n    const container = $(el).closest('tr, table, div'); \n    \n    // Basligi al\n    const title = $(el).text().trim() || \"Basliksiz Ilan\";\n    \n    // Fiyati bulmaya calis (TL iceren metni yakala)\n    const fullText = container.text();\n    const priceMatch = fullText.match(/(\\d[\\d\\.,]*\\s*TL)/);\n    const priceRaw = priceMatch ? priceMatch[0] : \"0\";\n\n    results.push({\n      external_id: idMatch[1],\n      title: title,\n      price_raw: priceRaw,\n      url: link,\n      source: 'sahibinden' // Kaynagi elle belirtiyoruz\n    });\n  }\n});\n\nreturn results;"
+      },
+      "id": "e5f348ea-768f-430a-acb5-4f38936281e8",
+      "name": "Sahibinden Parser (Cheerio)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 🛑 Dur ve Test Et\nBurası test aşamasıdır. Gmail kutunda 'sahibinden' veya benzeri bir yerden gelmiş okunmamış bir emlak bildirimi olduğundan emin ol ve **Execute Workflow** butonuna bas.",
+        "height": 234,
+        "width": 264
+      },
+      "id": "04c9fa94-ae7e-460c-9cc2-c841709de3ea",
+      "name": "Not",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// FAZ 5: PROFESYONEL VERİ TEMİZLEME VE NORMALİZASYON MOTORU\n// Standartlar: Teknik Rapor Bölüm 5.1 ve 5.2\n\nconst results = [];\n\n// Yardımcı Fonksiyon: HTML Entity Temizliği (Bölüm 5.2)\nfunction decodeHTMLEntities(text) {\n  if (!text) return \"\";\n  const entities = {\n    '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '\"', '&#39;': \"'\", '&#287;': 'ğ', '&#286;': 'Ğ',\n    '&#252;': 'ü', '&#220;': 'Ü', '&#351;': 'ş', '&#350;': 'Ş', '&#305;': 'ı', '&#304;': 'İ', '&#246;': 'ö', '&#214;': 'Ö', '&#231;': 'ç', '&#199;': 'Ç'\n  };\n  return text.replace(/&[a-zA-Z0-9#]+;/g, key => entities[key] || key).trim();\n}\n\nfor (const item of $input.all()) {\n  const json = item.json;\n\n  // --- 1. Para Birimi ve Sayısal Normalizasyon (Bölüm 5.1) ---\n  // Hedef: \"1.250.000,50 TL\" formatını -> 1250000.50 (Number) formatına çevirmek.\n  \n  let priceRaw = json.price_raw || json.price || \"0\";\n  let finalPrice = 0;\n  let currency = \"TRY\"; \n\n  // Eğer yapay zekadan temiz sayı geldiyse direkt al, yoksa işle\n  if (typeof priceRaw === 'number') {\n    finalPrice = priceRaw;\n  } else {\n    let priceStr = priceRaw.toString();\n\n    // Sembol Temizliği (Regex)\n    if (priceStr.match(/USD|\\$/i)) currency = \"USD\";\n    if (priceStr.match(/EUR|€/i)) currency = \"EUR\";\n    if (priceStr.match(/GBP|£/i)) currency = \"GBP\";\n\n    // Sadece rakam, nokta ve virgül bırak\n    priceStr = priceStr.replace(/[^\\d.,]/g, '');\n\n    // TR Format Kontrolü (Nokta binlik, Virgül ondalık mı?)\n    if (priceStr.includes(',') && priceStr.includes('.')) {\n       // Örn: 1.250.000,50 -> Noktaları sil, virgülü nokta yap\n       priceStr = priceStr.replace(/\\./g, '').replace(',', '.');\n    } else if (priceStr.includes(',')) {\n       // Örn: 1000,50 -> Virgülü nokta yap\n       priceStr = priceStr.replace(',', '.');\n    } else {\n       // Örn: 1.250.000 (Ondalık yok) -> Noktaları sil\n       // DİKKAT: Eğer 1.250 ise ve ondalıksa? Genelde emlak fiyatları büyük olduğu için nokta binliktir.\n       // Emlak fiyatı varsayımı: Nokta binlik ayırıcıdır.\n       priceStr = priceStr.replace(/\\./g, '');\n    }\n\n    finalPrice = parseFloat(priceStr) || 0;\n  }\n\n  // --- 2. Metin ve Lokasyon İşleme (Bölüm 5.2) ---\n  let title = decodeHTMLEntities(json.title || \"Basliksiz\");\n  \n  // Lokasyon Ayrıştırma\n  // Gelen format örnekleri: \"İstanbul / Kadıköy / Caferağa\" veya \"Muğla - Bodrum\"\n  let locationRaw = decodeHTMLEntities(json.location || \"\"); \n  let city = null;\n  let district = null;\n  let neighborhood = null;\n\n  // Ayırıcı belirle (/ veya -)\n  const separator = locationRaw.includes('/') ? '/' : (locationRaw.includes('-') ? '-' : null);\n\n  if (separator) {\n    const parts = locationRaw.split(separator).map(s => s.trim());\n    if (parts.length >= 1) city = parts[0];\n    if (parts.length >= 2) district = parts[1];\n    if (parts.length >= 3) neighborhood = parts[2];\n  } else {\n    // Ayırıcı yoksa tüm veriyi city veya district varsayabiliriz, şimdilik description'a atalım\n    // veya city olarak kabul edelim.\n    if (locationRaw) city = locationRaw.trim();\n  }\n\n  // --- 3. Çıktı Paketi ---\n  results.push({\n    json: {\n      ...json, // Eski verileri koru\n      title: title,\n      price: finalPrice, // Normalize edilmiş fiyat\n      currency: currency,\n      // Yeni Ayrıştırılmış Alanlar\n      city: city,\n      district: district,\n      neighborhood: neighborhood,\n      processed_at: new Date().toISOString() // İşlenme zamanı\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        -16
+      ],
+      "id": "7f68b6b2-1aa9-4e61-a900-a8886a5e08c4",
+      "name": "Veri Temizleme"
+    },
+    {
+      "parameters": {
+        "chatId": "910731538",
+        "text": "=🏠 **YENİ İLAN YAKALANDI!**\n\n📌 **Başlık:** {{ $json.title }}\n💰 **Fiyat:** {{ $json.price }} {{ $json.currency }}\n📍 **Kaynak:** {{ $json.source }}\n\n🔗 [İlana Gitmek İçin Tıkla]({{ $json.url }})",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1760,
+        0
+      ],
+      "id": "d4046adc-295c-4171-a608-a38baa553dca",
+      "name": "Send a text message",
+      "webhookId": "d2ce0bc7-79ba-47af-b419-bf9016aceb07",
+      "credentials": {
+        "telegramApi": {
+          "id": "hQrYgchASYmMemfN",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "listings",
+          "mode": "list",
+          "cachedResultName": "listings"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": 0,
+            "price": "={{ $json.price }}",
+            "size_m2": 0,
+            "external_id": "={{ $json.external_id }}",
+            "title": "={{ $json.title }} {{ $json.title }}",
+            "currency": "={{ $json.currency }}",
+            "location": "=",
+            "url": "={{ $json.url }}",
+            "source": "={{ $json.source }}",
+            "created_at": "={{ $now }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "external_id",
+              "displayName": "external_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "size_m2",
+              "displayName": "size_m2",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "skipOnConflict": true
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1360,
+        0
+      ],
+      "id": "8a4854f8-28a3-41fb-8996-927905103bd5",
+      "name": "Check & Save İlan ID",
+      "credentials": {
+        "postgres": {
+          "id": "knivN4ZNxrv3Hiuv",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4c8946e2-4408-424a-9f13-52c5d46a61d9",
+              "leftValue": "{{ $json.external_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        32
+      ],
+      "id": "ed42e4df-a86c-4b54-9dff-b9b991f4b533",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4b749a23-0b73-40a4-9bf7-6736a2c3d592",
+              "leftValue": "={{ $json.price }}",
+              "rightValue": "=0",
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        -16
+      ],
+      "id": "fa2d5dc2-e3e5-482f-ad75-e2f724279a78",
+      "name": "Ayrıştırma Başarısız?"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  let priceRaw = item.json.price;\n  if (priceRaw && typeof priceRaw === 'string') {\n    // \" TL\" ve \".\" işaretlerini sil, boşlukları sil ve sonucu sayıya çevir.\n    let cleanedPrice = priceRaw\n      .replace(/[^0-9]/g, ''); // Sadece rakam olmayan her şeyi sil\n\n    // Eğer Cheerio'dan sonra $json.price değeri 'price' diye geliyorsa bu satırı kullanın\n    item.json.price = parseInt(cleanedPrice || 0);\n\n    // priceRaw'ın yerine price olarak geliyorsa\n    // item.json.price = parseInt(cleanedPrice || 0);\n  }\n}\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        -16
+      ],
+      "id": "d7236936-05aa-4c6d-aff2-1111e098118b",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "// HTML etiketlerini temizle ve sadece metni al\nconst html = $input.item.json.html || \"\";\n// Basit bir regex ile tag'leri uçuruyoruz\nconst cleanText = html.replace(/<[^>]*>/g, ' ')\n                      .replace(/\\s+/g, ' ') // Fazla boşlukları sil\n                      .trim();\n\nreturn {\n  json: {\n    clean_text: cleanText\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        -128
+      ],
+      "id": "a689dcc7-6b69-45f0-9939-0e919fb4d2dd",
+      "name": "HTML to Text"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "={{ $json.clean_text }}"
+            },
+            {
+              "role": "system",
+              "content": "Sen uzman bir veri madencisisin. Görevin, sana verilen düzensiz emlak ilanı metnini analiz edip aşağıdaki verileri çıkarmaktır.\n\nKurallar:\n1. SADECE geçerli bir JSON objesi döndür.\n2. Kesinlikle ```json veya ``` gibi markdown etiketleri KULLANMA. Sadece saf JSON ver.\n3. Fiyatı temiz bir sayı (Number) olarak ver.\n4. ID bulunamazsa null ver.\n5. Format: {\"external_id\": \"...\", \"title\": \"...\", \"price\": 0, \"currency\": \"TRY\", \"url\": \"...\", \"source\": \"sahibinden\"}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "metadata": "{}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        1040,
+        -384
+      ],
+      "id": "33af7aa8-7adb-481f-8dfb-9686fa85882a",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "IpaPql5Wsxzk073S",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// OpenAI'den gelen metni alıyoruz\nconst rawContent = $input.item.json.response || $input.item.json.content || $input.item.json.message?.content || $input.item.json.text || \"\";\n\nlet jsonData = {};\n\ntry {\n  // Markdown temizliği yapıp JSON'a çeviriyoruz\n  const cleanJson = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();\n  jsonData = JSON.parse(cleanJson);\n} catch (error) {\n  // EĞER HATA OLURSA: Veritabanının kızmaması için rastgele bir ID uyduruyoruz\n  jsonData = {\n    external_id: Math.floor(Math.random() * 900000000 + 100000000).toString(), // Rastgele 9 haneli sayı\n    title: \"AI Ayrıştıramadı (Manuel Kontrol Gerekli)\",\n    price: 0,\n    currency: \"TRY\",\n    url: \"\",\n    source: \"sahibinden_ai_hata\"\n  };\n}\n\n// Eğer AI çalıştı ama ID bulamadıysa (null geldiyse) yine patlamaması için kontrol:\nif (!jsonData.external_id) {\n    jsonData.external_id = Math.floor(Math.random() * 900000000 + 100000000).toString();\n}\n\nreturn {\n  json: jsonData\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        -320
+      ],
+      "id": "489464da-bc8e-4c98-8d58-b5bed4aa7401",
+      "name": "JSON Parse"
+    }
+  ],
+  "connections": {
+    "Gmail Tetikleyici": {
+      "main": [
+        [
+          {
+            "node": "Hangi Site?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hangi Site?": {
+      "main": [
+        [
+          {
+            "node": "Sahibinden Parser (Cheerio)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Sahibinden Parser (Cheerio)": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veri Temizleme": {
+      "main": [
+        [
+          {
+            "node": "Ayrıştırma Başarısız?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        []
+      ]
+    },
+    "Check & Save İlan ID": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ayrıştırma Başarısız?": {
+      "main": [
+        [
+          {
+            "node": "HTML to Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Veri Temizleme",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML to Text": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "JSON Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON Parse": {
+      "main": [
+        [
+          {
+            "node": "Check & Save İlan ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {
+    "node:Gmail Tetikleyici": {
+      "lastTimeChecked": 1764921294,
+      "possibleDuplicates": [
+        "19aed81c2ad22a57",
+        "19aed81c261158f6"
+      ]
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "e1441a78-6d19-4837-8e38-f6021f72a383",
+  "activeVersionId": "e1441a78-6d19-4837-8e38-f6021f72a383",
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2025-12-03T22:23:46.699Z",
+      "createdAt": "2025-12-03T22:23:46.699Z",
+      "role": "workflow:owner",
+      "workflowId": "AcTnxjRzyDFnkMfR",
+      "projectId": "n7PkrN53sUUxEdoo"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2025-12-05T09:25:53.983Z",
+    "createdAt": "2025-12-05T09:25:53.983Z",
+    "versionId": "e1441a78-6d19-4837-8e38-f6021f72a383",
+    "workflowId": "AcTnxjRzyDFnkMfR",
+    "nodes": [
+      {
+        "parameters": {
+          "pollTimes": {
+            "item": [
+              {
+                "mode": "everyMinute"
+              }
+            ]
+          },
+          "simple": false,
+          "filters": {
+            "labelIds": [
+              "INBOX"
+            ],
+            "q": "newer_than:15d subject:\"Favori Arama İçin Sonuçlar\"",
+            "readStatus": "unread"
+          },
+          "options": {}
+        },
+        "id": "4862075b-8ac1-4eca-861b-725cf8a9f47b",
+        "name": "Gmail Tetikleyici",
+        "type": "n8n-nodes-base.gmailTrigger",
+        "typeVersion": 1,
+        "position": [
+          -272,
+          32
+        ],
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "Dr94VJdkpXskpoQw",
+            "name": "Gmail account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "dataType": "string",
+          "value1": "={{ $json.from.value[0].address }}",
+          "rules": {
+            "rules": [
+              {
+                "value2": "sahibinden.com"
+              },
+              {
+                "value2": "emlakjet.com",
+                "output": 1
+              },
+              {
+                "value2": "hepsiemlak.com",
+                "output": 2
+              }
+            ]
+          },
+          "fallbackOutput": 3
+        },
+        "id": "195b64a5-50f8-46ed-b8fd-7685b4eaa2c1",
+        "name": "Hangi Site?",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 1,
+        "position": [
+          -80,
+          0
+        ],
+        "disabled": true
+      },
+      {
+        "parameters": {
+          "jsCode": "// SAHIBINDEN.COM PARSER (FINAL VERSIYON)\n// Bu kod ilanin tüm detaylarini (Baslik, Fiyat, Link) ceker.\n\nconst html = $input.item.json.html || \"\";\nconst $ = require('cheerio').load(html);\nconst results = [];\n\n// Ilan linklerini bul\n$('a[href*=\"/ilan/\"]').each((i, el) => {\n  const link = $(el).attr('href');\n  \n  // Linkten ID'yi cikar\n  const idMatch = link.match(/-(\\d{9,10})\\/detay/);\n  \n  if (idMatch) {\n    // Ilanin oldugu satiri (cerceveyi) bul\n    const container = $(el).closest('tr, table, div'); \n    \n    // Basligi al\n    const title = $(el).text().trim() || \"Basliksiz Ilan\";\n    \n    // Fiyati bulmaya calis (TL iceren metni yakala)\n    const fullText = container.text();\n    const priceMatch = fullText.match(/(\\d[\\d\\.,]*\\s*TL)/);\n    const priceRaw = priceMatch ? priceMatch[0] : \"0\";\n\n    results.push({\n      external_id: idMatch[1],\n      title: title,\n      price_raw: priceRaw,\n      url: link,\n      source: 'sahibinden' // Kaynagi elle belirtiyoruz\n    });\n  }\n});\n\nreturn results;"
+        },
+        "id": "e5f348ea-768f-430a-acb5-4f38936281e8",
+        "name": "Sahibinden Parser (Cheerio)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          192,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "content": "## 🛑 Dur ve Test Et\nBurası test aşamasıdır. Gmail kutunda 'sahibinden' veya benzeri bir yerden gelmiş okunmamış bir emlak bildirimi olduğundan emin ol ve **Execute Workflow** butonuna bas.",
+          "height": 234,
+          "width": 264
+        },
+        "id": "04c9fa94-ae7e-460c-9cc2-c841709de3ea",
+        "name": "Not",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -64,
+          -224
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// FAZ 5: PROFESYONEL VERİ TEMİZLEME VE NORMALİZASYON MOTORU\n// Standartlar: Teknik Rapor Bölüm 5.1 ve 5.2\n\nconst results = [];\n\n// Yardımcı Fonksiyon: HTML Entity Temizliği (Bölüm 5.2)\nfunction decodeHTMLEntities(text) {\n  if (!text) return \"\";\n  const entities = {\n    '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '\"', '&#39;': \"'\", '&#287;': 'ğ', '&#286;': 'Ğ',\n    '&#252;': 'ü', '&#220;': 'Ü', '&#351;': 'ş', '&#350;': 'Ş', '&#305;': 'ı', '&#304;': 'İ', '&#246;': 'ö', '&#214;': 'Ö', '&#231;': 'ç', '&#199;': 'Ç'\n  };\n  return text.replace(/&[a-zA-Z0-9#]+;/g, key => entities[key] || key).trim();\n}\n\nfor (const item of $input.all()) {\n  const json = item.json;\n\n  // --- 1. Para Birimi ve Sayısal Normalizasyon (Bölüm 5.1) ---\n  // Hedef: \"1.250.000,50 TL\" formatını -> 1250000.50 (Number) formatına çevirmek.\n  \n  let priceRaw = json.price_raw || json.price || \"0\";\n  let finalPrice = 0;\n  let currency = \"TRY\"; \n\n  // Eğer yapay zekadan temiz sayı geldiyse direkt al, yoksa işle\n  if (typeof priceRaw === 'number') {\n    finalPrice = priceRaw;\n  } else {\n    let priceStr = priceRaw.toString();\n\n    // Sembol Temizliği (Regex)\n    if (priceStr.match(/USD|\\$/i)) currency = \"USD\";\n    if (priceStr.match(/EUR|€/i)) currency = \"EUR\";\n    if (priceStr.match(/GBP|£/i)) currency = \"GBP\";\n\n    // Sadece rakam, nokta ve virgül bırak\n    priceStr = priceStr.replace(/[^\\d.,]/g, '');\n\n    // TR Format Kontrolü (Nokta binlik, Virgül ondalık mı?)\n    if (priceStr.includes(',') && priceStr.includes('.')) {\n       // Örn: 1.250.000,50 -> Noktaları sil, virgülü nokta yap\n       priceStr = priceStr.replace(/\\./g, '').replace(',', '.');\n    } else if (priceStr.includes(',')) {\n       // Örn: 1000,50 -> Virgülü nokta yap\n       priceStr = priceStr.replace(',', '.');\n    } else {\n       // Örn: 1.250.000 (Ondalık yok) -> Noktaları sil\n       // DİKKAT: Eğer 1.250 ise ve ondalıksa? Genelde emlak fiyatları büyük olduğu için nokta binliktir.\n       // Emlak fiyatı varsayımı: Nokta binlik ayırıcıdır.\n       priceStr = priceStr.replace(/\\./g, '');\n    }\n\n    finalPrice = parseFloat(priceStr) || 0;\n  }\n\n  // --- 2. Metin ve Lokasyon İşleme (Bölüm 5.2) ---\n  let title = decodeHTMLEntities(json.title || \"Basliksiz\");\n  \n  // Lokasyon Ayrıştırma\n  // Gelen format örnekleri: \"İstanbul / Kadıköy / Caferağa\" veya \"Muğla - Bodrum\"\n  let locationRaw = decodeHTMLEntities(json.location || \"\"); \n  let city = null;\n  let district = null;\n  let neighborhood = null;\n\n  // Ayırıcı belirle (/ veya -)\n  const separator = locationRaw.includes('/') ? '/' : (locationRaw.includes('-') ? '-' : null);\n\n  if (separator) {\n    const parts = locationRaw.split(separator).map(s => s.trim());\n    if (parts.length >= 1) city = parts[0];\n    if (parts.length >= 2) district = parts[1];\n    if (parts.length >= 3) neighborhood = parts[2];\n  } else {\n    // Ayırıcı yoksa tüm veriyi city veya district varsayabiliriz, şimdilik description'a atalım\n    // veya city olarak kabul edelim.\n    if (locationRaw) city = locationRaw.trim();\n  }\n\n  // --- 3. Çıktı Paketi ---\n  results.push({\n    json: {\n      ...json, // Eski verileri koru\n      title: title,\n      price: finalPrice, // Normalize edilmiş fiyat\n      currency: currency,\n      // Yeni Ayrıştırılmış Alanlar\n      city: city,\n      district: district,\n      neighborhood: neighborhood,\n      processed_at: new Date().toISOString() // İşlenme zamanı\n    }\n  });\n}\n\nreturn results;"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          544,
+          -16
+        ],
+        "id": "7f68b6b2-1aa9-4e61-a900-a8886a5e08c4",
+        "name": "Veri Temizleme"
+      },
+      {
+        "parameters": {
+          "chatId": "910731538",
+          "text": "=🏠 **YENİ İLAN YAKALANDI!**\n\n📌 **Başlık:** {{ $json.title }}\n💰 **Fiyat:** {{ $json.price }} {{ $json.currency }}\n📍 **Kaynak:** {{ $json.source }}\n\n🔗 [İlana Gitmek İçin Tıkla]({{ $json.url }})",
+          "additionalFields": {}
+        },
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          1760,
+          0
+        ],
+        "id": "d4046adc-295c-4171-a608-a38baa553dca",
+        "name": "Send a text message",
+        "webhookId": "d2ce0bc7-79ba-47af-b419-bf9016aceb07",
+        "credentials": {
+          "telegramApi": {
+            "id": "hQrYgchASYmMemfN",
+            "name": "Telegram account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "mode": "list",
+            "value": "public"
+          },
+          "table": {
+            "__rl": true,
+            "value": "listings",
+            "mode": "list",
+            "cachedResultName": "listings"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "id": 0,
+              "price": "={{ $json.price }}",
+              "size_m2": 0,
+              "external_id": "={{ $json.external_id }}",
+              "title": "={{ $json.title }} {{ $json.title }}",
+              "currency": "={{ $json.currency }}",
+              "location": "=",
+              "url": "={{ $json.url }}",
+              "source": "={{ $json.source }}",
+              "created_at": "={{ $now }}"
+            },
+            "matchingColumns": [
+              "id"
+            ],
+            "schema": [
+              {
+                "id": "id",
+                "displayName": "id",
+                "required": false,
+                "defaultMatch": true,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": true,
+                "removed": false
+              },
+              {
+                "id": "external_id",
+                "displayName": "external_id",
+                "required": true,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "title",
+                "displayName": "title",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "price",
+                "displayName": "price",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "currency",
+                "displayName": "currency",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "location",
+                "displayName": "location",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "size_m2",
+                "displayName": "size_m2",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "number",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "url",
+                "displayName": "url",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "source",
+                "displayName": "source",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "created_at",
+                "displayName": "created_at",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "dateTime",
+                "canBeUsedToMatch": true
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {
+            "skipOnConflict": true
+          }
+        },
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1360,
+          0
+        ],
+        "id": "8a4854f8-28a3-41fb-8996-927905103bd5",
+        "name": "Check & Save İlan ID",
+        "credentials": {
+          "postgres": {
+            "id": "knivN4ZNxrv3Hiuv",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "4c8946e2-4408-424a-9f13-52c5d46a61d9",
+                "leftValue": "{{ $json.external_id }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals",
+                  "name": "filter.operator.equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1568,
+          32
+        ],
+        "id": "ed42e4df-a86c-4b54-9dff-b9b991f4b533",
+        "name": "If1"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "4b749a23-0b73-40a4-9bf7-6736a2c3d592",
+                "leftValue": "={{ $json.price }}",
+                "rightValue": "=0",
+                "operator": {
+                  "type": "number",
+                  "operation": "notEquals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true,
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          720,
+          -16
+        ],
+        "id": "fa2d5dc2-e3e5-482f-ad75-e2f724279a78",
+        "name": "Ayrıştırma Başarısız?"
+      },
+      {
+        "parameters": {
+          "jsCode": "for (const item of $input.all()) {\n  let priceRaw = item.json.price;\n  if (priceRaw && typeof priceRaw === 'string') {\n    // \" TL\" ve \".\" işaretlerini sil, boşlukları sil ve sonucu sayıya çevir.\n    let cleanedPrice = priceRaw\n      .replace(/[^0-9]/g, ''); // Sadece rakam olmayan her şeyi sil\n\n    // Eğer Cheerio'dan sonra $json.price değeri 'price' diye geliyorsa bu satırı kullanın\n    item.json.price = parseInt(cleanedPrice || 0);\n\n    // priceRaw'ın yerine price olarak geliyorsa\n    // item.json.price = parseInt(cleanedPrice || 0);\n  }\n}\nreturn $input.all();"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          368,
+          -16
+        ],
+        "id": "d7236936-05aa-4c6d-aff2-1111e098118b",
+        "name": "Code in JavaScript"
+      },
+      {
+        "parameters": {
+          "jsCode": "// HTML etiketlerini temizle ve sadece metni al\nconst html = $input.item.json.html || \"\";\n// Basit bir regex ile tag'leri uçuruyoruz\nconst cleanText = html.replace(/<[^>]*>/g, ' ')\n                      .replace(/\\s+/g, ' ') // Fazla boşlukları sil\n                      .trim();\n\nreturn {\n  json: {\n    clean_text: cleanText\n  }\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          928,
+          -128
+        ],
+        "id": "a689dcc7-6b69-45f0-9939-0e919fb4d2dd",
+        "name": "HTML to Text"
+      },
+      {
+        "parameters": {
+          "modelId": {
+            "__rl": true,
+            "value": "gpt-4o",
+            "mode": "list",
+            "cachedResultName": "GPT-4O"
+          },
+          "responses": {
+            "values": [
+              {
+                "content": "={{ $json.clean_text }}"
+              },
+              {
+                "role": "system",
+                "content": "Sen uzman bir veri madencisisin. Görevin, sana verilen düzensiz emlak ilanı metnini analiz edip aşağıdaki verileri çıkarmaktır.\n\nKurallar:\n1. SADECE geçerli bir JSON objesi döndür.\n2. Kesinlikle ```json veya ``` gibi markdown etiketleri KULLANMA. Sadece saf JSON ver.\n3. Fiyatı temiz bir sayı (Number) olarak ver.\n4. ID bulunamazsa null ver.\n5. Format: {\"external_id\": \"...\", \"title\": \"...\", \"price\": 0, \"currency\": \"TRY\", \"url\": \"...\", \"source\": \"sahibinden\"}"
+              }
+            ]
+          },
+          "builtInTools": {},
+          "options": {
+            "metadata": "{}"
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.openAi",
+        "typeVersion": 2.1,
+        "position": [
+          1040,
+          -384
+        ],
+        "id": "33af7aa8-7adb-481f-8dfb-9686fa85882a",
+        "name": "Message a model",
+        "credentials": {
+          "openAiApi": {
+            "id": "IpaPql5Wsxzk073S",
+            "name": "OpenAi account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// OpenAI'den gelen metni alıyoruz\nconst rawContent = $input.item.json.response || $input.item.json.content || $input.item.json.message?.content || $input.item.json.text || \"\";\n\nlet jsonData = {};\n\ntry {\n  // Markdown temizliği yapıp JSON'a çeviriyoruz\n  const cleanJson = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();\n  jsonData = JSON.parse(cleanJson);\n} catch (error) {\n  // EĞER HATA OLURSA: Veritabanının kızmaması için rastgele bir ID uyduruyoruz\n  jsonData = {\n    external_id: Math.floor(Math.random() * 900000000 + 100000000).toString(), // Rastgele 9 haneli sayı\n    title: \"AI Ayrıştıramadı (Manuel Kontrol Gerekli)\",\n    price: 0,\n    currency: \"TRY\",\n    url: \"\",\n    source: \"sahibinden_ai_hata\"\n  };\n}\n\n// Eğer AI çalıştı ama ID bulamadıysa (null geldiyse) yine patlamaması için kontrol:\nif (!jsonData.external_id) {\n    jsonData.external_id = Math.floor(Math.random() * 900000000 + 100000000).toString();\n}\n\nreturn {\n  json: jsonData\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1472,
+          -320
+        ],
+        "id": "489464da-bc8e-4c98-8d58-b5bed4aa7401",
+        "name": "JSON Parse"
+      }
+    ],
+    "connections": {
+      "Gmail Tetikleyici": {
+        "main": [
+          [
+            {
+              "node": "Hangi Site?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Hangi Site?": {
+        "main": [
+          [
+            {
+              "node": "Sahibinden Parser (Cheerio)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Sahibinden Parser (Cheerio)": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Veri Temizleme": {
+        "main": [
+          [
+            {
+              "node": "Ayrıştırma Başarısız?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send a text message": {
+        "main": [
+          []
+        ]
+      },
+      "Check & Save İlan ID": {
+        "main": [
+          [
+            {
+              "node": "If1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If1": {
+        "main": [
+          [
+            {
+              "node": "Send a text message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Ayrıştırma Başarısız?": {
+        "main": [
+          [
+            {
+              "node": "HTML to Text",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Code in JavaScript": {
+        "main": [
+          [
+            {
+              "node": "Veri Temizleme",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTML to Text": {
+        "main": [
+          [
+            {
+              "node": "Message a model",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Message a model": {
+        "main": [
+          [
+            {
+              "node": "JSON Parse",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "JSON Parse": {
+        "main": [
+          [
+            {
+              "node": "Check & Save İlan ID",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "eyup biskiner",
+    "name": null,
+    "description": null
+  },
+  "tags": []
+}
