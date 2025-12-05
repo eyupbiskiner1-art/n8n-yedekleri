@@ -1,0 +1,240 @@
+{
+  "updatedAt": "2025-12-04T07:06:36.630Z",
+  "createdAt": "2025-12-03T21:31:06.547Z",
+  "id": "VqqnrFskxVwkmIjS",
+  "name": "n8n yedekleme",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "name": "Her Gun 1 Kere",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        448,
+        -208
+      ],
+      "id": "a0dbf1f2-0aee-457f-a157-bb57bae9d10b"
+    },
+    {
+      "parameters": {
+        "filters": {},
+        "requestOptions": {}
+      },
+      "name": "Tum Is Akislarini Cek",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        656,
+        -208
+      ],
+      "id": "0e17c5cb-3d6f-4827-97c9-785e2005f34d",
+      "credentials": {
+        "n8nApi": {
+          "id": "yCCmUlxvPQhF013U",
+          "name": "n8n account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "owner": {
+          "__rl": true,
+          "value": "eyupbiskiner1-art",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "n8n-yedekleri"
+        },
+        "filePath": "={{$json[\"name\"]}}_{{new Date().toISOString().replace(/:/g, '-').split('.')[0]}}.json",
+        "fileContent": "={{JSON.stringify($json, null, 2)}}",
+        "commitMessage": "=Otomatik Yedekleme"
+      },
+      "name": "GitHub'a Gonder",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [
+        848,
+        -208
+      ],
+      "id": "a3767cf9-1a6b-4cba-9a30-99a496d136b7",
+      "webhookId": "9e91326f-70e1-4f9c-bd6b-68d626d67306",
+      "credentials": {
+        "githubApi": {
+          "id": "i9O0uHlq4X9bp2hd",
+          "name": "GitHub account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Her Gun 1 Kere": {
+      "main": [
+        [
+          {
+            "node": "Tum Is Akislarini Cek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tum Is Akislarini Cek": {
+      "main": [
+        [
+          {
+            "node": "GitHub'a Gonder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {
+    "node:Her Gun 1 Kere": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "4ae6d84b-23fe-417e-a19d-9963f47da162",
+  "activeVersionId": "4ae6d84b-23fe-417e-a19d-9963f47da162",
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2025-12-03T21:31:06.547Z",
+      "createdAt": "2025-12-03T21:31:06.547Z",
+      "role": "workflow:owner",
+      "workflowId": "VqqnrFskxVwkmIjS",
+      "projectId": "n7PkrN53sUUxEdoo"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2025-12-04T07:06:36.608Z",
+    "createdAt": "2025-12-04T07:06:36.608Z",
+    "versionId": "4ae6d84b-23fe-417e-a19d-9963f47da162",
+    "workflowId": "VqqnrFskxVwkmIjS",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours",
+                "hoursInterval": 24
+              }
+            ]
+          }
+        },
+        "name": "Her Gun 1 Kere",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1,
+        "position": [
+          448,
+          -208
+        ],
+        "id": "a0dbf1f2-0aee-457f-a157-bb57bae9d10b"
+      },
+      {
+        "parameters": {
+          "filters": {},
+          "requestOptions": {}
+        },
+        "name": "Tum Is Akislarini Cek",
+        "type": "n8n-nodes-base.n8n",
+        "typeVersion": 1,
+        "position": [
+          656,
+          -208
+        ],
+        "id": "0e17c5cb-3d6f-4827-97c9-785e2005f34d",
+        "credentials": {
+          "n8nApi": {
+            "id": "yCCmUlxvPQhF013U",
+            "name": "n8n account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "resource": "file",
+          "owner": {
+            "__rl": true,
+            "value": "eyupbiskiner1-art",
+            "mode": "name"
+          },
+          "repository": {
+            "__rl": true,
+            "mode": "name",
+            "value": "n8n-yedekleri"
+          },
+          "filePath": "={{$json[\"name\"]}}_{{new Date().toISOString().replace(/:/g, '-').split('.')[0]}}.json",
+          "fileContent": "={{JSON.stringify($json, null, 2)}}",
+          "commitMessage": "=Otomatik Yedekleme"
+        },
+        "name": "GitHub'a Gonder",
+        "type": "n8n-nodes-base.github",
+        "typeVersion": 1,
+        "position": [
+          848,
+          -208
+        ],
+        "id": "a3767cf9-1a6b-4cba-9a30-99a496d136b7",
+        "webhookId": "9e91326f-70e1-4f9c-bd6b-68d626d67306",
+        "credentials": {
+          "githubApi": {
+            "id": "i9O0uHlq4X9bp2hd",
+            "name": "GitHub account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Her Gun 1 Kere": {
+        "main": [
+          [
+            {
+              "node": "Tum Is Akislarini Cek",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Tum Is Akislarini Cek": {
+        "main": [
+          [
+            {
+              "node": "GitHub'a Gonder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "eyup biskiner",
+    "name": null,
+    "description": null
+  },
+  "tags": []
+}
